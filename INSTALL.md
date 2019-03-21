@@ -1,6 +1,4 @@
-Build:
-
-Needed SW
+Prerequisities:
 - Linux or Unix, maybe some unix-like enviroment (MinGW etc.)
 - System progs date, cut, grep, make, expr, bash compatible shell
 - genisoimage
