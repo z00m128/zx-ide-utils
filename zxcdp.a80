@@ -1,0 +1,1431 @@
+; ZX CD Player - simple CD player for ZX Spectrum
+;
+; Copyright (C) 2000-2005  Lubomir Blaha <tritol(at)trilogic(dot)cz>
+;
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+;
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+;
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+;
+; http://www.gnu.org/licenses/gpl.html
+; Cesky neoficialni preklad http://www.gnu.cz/gpl-cz.html
+
+
+		CPU	Z80UNDOC
+		RELAXED	ON
+
+; for SjASMPlus
+;		device	zxspectrum48
+		
+		org	32768
+		
+START	
+		exx	
+		push	hl
+;inicializuj driver
+		call	ACDDRV
+		jp	c,ENDE
+;inicializuj im2 (periodicke
+;volani driveru)
+		call	INITIM2
+;vytiskni uvodni obrazovku
+		ld	a,2
+		call	$1601
+		call	PRINTSP
+		db	22,0,1,19,1
+		db	"Text CD player "
+		db	"v0.2a 2001 DTP"
+		db	13,13
+		db	"Driver:"
+		db	19,0,13+128
+		ld	b,32
+		ld	hl,DRVNAME
+		call	PRINTB
+		call	PRINTSP
+		db	19,1
+		db	"Device:"
+		db	19,0,13+128
+		ld	b,32
+		ld	hl,DEVNAME
+		call	PRINTB
+		ld	a,'('
+		rst	16
+		ld	a,(DEVINFO)
+		push	af
+		ld	hl,MASTXT
+		bit	4,a
+		jr	z,STA1
+		ld	hl,SLATXT
+STA1		call	PRINT128
+		pop	af
+		push	af
+		rrca	
+		rrca	
+		rrca	
+		and	%00011000
+		ld	hl,DRQTXT
+		call	ADDHLA
+		call	PRINT128
+		ld	a,32
+		rst	16
+		pop	bc
+		ld	c,'-'
+		ld	a,'l'
+		rr	b
+		jr	c,STA2
+		ld	a,c
+STA2		rst	16
+		ld	a,'a'
+		rr	b
+		jr	c,STA3
+		ld	a,c
+STA3		rst	16
+		ld	a,'j'
+		rr	b
+;prevent jumper - obracena log.
+		jr	nc,STA4
+		ld	a,c
+STA4		rst	16
+		ld	a,'e'
+		rr	b
+		jr	c,STA5
+		ld	a,c
+STA5		rst	16
+		ld	a,'t'
+		rr	b
+		rr	b
+		jr	c,STA6
+		ld	a,c
+STA6		rst	16
+		ld	a,')'
+		rst	16
+		
+		call	PRINTSP
+		db	22,18,0
+		db	19,1,'P',19,0
+		db	"-Play "
+		db	19,1,'S',19,0
+		db	"-Stop "
+		db	19,1,'M',19,0
+		db	"-Pause "
+		db	19,1,'L',19,0
+		db	"-Lock"
+		db	13,19,1,'F',19,0
+		db	"-Skip forward "
+		db	19,1,'B',19,0
+		db	"-Skip backward"
+		db	13,19,1,'O',19,0
+		db	"-Scan forward "
+		db	19,1
+		db	"CS+O"
+		db	19,0
+		db	"-Scan back."
+		db	13,19,1
+		db	"Spc"
+		db	19,0
+		db	"-Open/Close "
+		db	19,1,'R',19,0
+		db	"-ErrRes "
+		db	19,1
+		db	"Ent"
+		db	19,0
+		db	"-Qui",'t'+128
+		
+;init play (no scan)
+		ld	a,6
+		ld	(PLSC+1),a
+		
+HLSMYC2		ld	b,10
+HLWAIT		halt	
+		djnz	HLWAIT
+		
+		ld	hl,HLSMYC2
+		push	hl
+		
+HLSMYC	
+		ld	a,22
+		rst	16
+		ld	a,9
+		rst	16
+		xor	a
+		rst	16
+		ld	a,(CDERROR)
+		call	PRINTERR
+		ld	a,(SENSEKEY)
+		call	PRINTERR
+		ld	a,(ADSECOD)
+		call	PRINTERR
+		ld	a,(ADSECODQ)
+		call	PRINTERR
+		ld	a,(CDRSTAT)
+		and	15
+		add	a,a
+		ld	hl,TABSTAT
+		call	ADDHLA
+		ld	a,(hl)
+		inc	hl
+		ld	h,(hl)
+		ld	l,a
+		call	PRINT128
+		ld	a,13
+		rst	16
+		ld	a,(CDRSTAT)
+		rla	
+		jr	nc,EXTIN1
+		push	af
+		call	PRINTSP
+		db	"locked",160
+		pop	af
+EXTIN1		rla	
+		jr	nc,EXTIN2
+		push	af
+		call	PRINTSP
+		db	"changed",160
+		pop	af
+EXTIN2		rla	
+		jr	c,EXTIN3
+		push	af
+		call	PRINTSP
+		db	"no audio tracks",160
+		pop	af
+EXTIN3	
+		rla	
+		jr	nc,EXTIN4
+		call	PRINTSP
+		db	"cd-text",160
+EXTIN4	
+		call	PRINTSP
+		db	"              ",160
+		ld	a,22
+		rst	16
+		ld	a,12
+		rst	16
+		xor	a
+		rst	16
+		ld	a,(CDLASTR)
+		ld	l,a
+		ld	h,0
+		call	PRINTL2
+		ld	a,32
+		rst	16
+		ld	hl,CDSIZE
+		call	PRINTA
+		ld	a,':'
+		rst	16
+		call	PRINTA
+		ld	a,':'
+		rst	16
+		call	PRINTA
+		ld	a,32
+		rst	16
+		ld	hl,ACTTRACK
+		push	hl
+		ld	a,(hl)
+		dec	a
+		ld	l,a
+		ld	h,0
+		add	hl,hl
+		add	hl,hl
+		add	hl,hl
+		ld	bc,CDTOC+5
+		add	hl,bc
+		call	PRINTA
+		ld	a,':'
+		rst	16
+		call	PRINTA
+		ld	a,':'
+		rst	16
+		call	PRINTA
+		ld	a,13
+		rst	16
+		pop	hl
+		call	PRINTA
+		ld	a,32
+		rst	16
+		inc	hl
+		inc	hl
+		call	PRINTA
+		ld	a,':'
+		rst	16
+		call	PRINTA
+		ld	a,':'
+		rst	16
+		call	PRINTA
+		ld	a,32
+		rst	16
+		inc	hl
+		call	PRINTA
+		ld	a,':'
+		rst	16
+		call	PRINTA
+		ld	a,':'
+		rst	16
+		call	PRINTA
+		ld	a,32
+		rst	16
+		
+		ld	a,223
+		in	a,(254)
+		rra	
+;"p"
+;play
+		jp	nc,DPLAYALL
+		
+		rra	
+;"o"
+;scan
+		jp	nc,DSCANALL
+		
+		ld	a,127
+		in	a,(254)
+		bit	0,a
+;"space"
+		jr	nz,SM1
+;open/close
+		ld	a,2
+		ld	(COMMAND),a
+		ret	
+SM1		
+		bit	2,a
+;"m"
+		jr	nz,SM2
+;pause/resume
+		ld	a,5
+		ld	(COMMAND),a
+		ret	
+SM2		
+		bit	4,a
+;"b"
+;back
+		jp	z,DBACK
+		
+		ld	a,253
+		in	a,(254)
+		bit	1,a
+;"s"
+		jr	nz,SM3
+;stop
+		ld	a,4
+		ld	(COMMAND),a
+		ret	
+SM3		
+		bit	3,a
+;"f"
+;forward
+		jp	z,DFORW
+		
+		ld	a,251
+		in	a,(254)
+		bit	3,a
+;"r"
+		jr	nz,SM4
+;reset cd error
+		xor	a
+		ld	(CDERROR),a
+		ld	(SENSEKEY),a
+		ld	(ADSECOD),a
+		ld	(ADSECODQ),a
+;pokud budou za sebou, jine
+;instrukce
+		ret	
+		
+SM4		
+		ld	a,191
+		in	a,(254)
+		rra	
+;"enter"
+;konec
+		jr	nc,DEINIT
+		rra	
+;"l"
+		jp	c,HLSMYC
+;"lock"
+		ld	a,3
+		ld	(COMMAND),a
+		ret	
+		
+;provadeci podprogramy
+DSCANALL	
+		ld	a,254
+		in	a,(254)
+		rra	
+		ld	a,8
+		jr	c,PLSCSP
+		set	7,a
+		jr	PLSCSP
+		
+DPLAYALL	ld	a,6
+PLSCSP		ld	(PLSC+1),a
+		ld	a,(CDFIRSTR)
+DPLAYSP		ld	(COMTR1),a
+		ld	a,(CDLASTR)
+		ld	(COMTR2),a
+PLSC		ld	a,6
+		ld	(COMMAND),a
+		ret	
+		
+DFORW		ld	a,(ACTTRACK)
+		ld	hl,CDLASTR
+		cp	(hl)
+		ret	z
+		inc	a
+		jr	DPLAYSP
+		
+DBACK		ld	a,(ACTTRACK)
+		ld	hl,CDFIRSTR
+		cp	(hl)
+		ret	z
+		dec	a
+		jr	DPLAYSP
+		
+;konec
+DEINIT		di	
+		pop	af
+		ld	a,63
+		ld	i,a
+		im	1
+ENDE		pop	hl
+		exx	
+		ei	
+		ret	
+		
+;zde inicializace im2
+INITIM2		ld	hl,IMTABLE
+		ld	de,IMTABLE+1
+		ld	bc,256
+		ld	(hl),145
+		ldir	
+		ld	a,195
+		ld	(37265),a
+		ld	hl,IM2
+		ld	(37266),hl
+		ld	a,IMTABLE/256
+		ld	i,a
+		im	2
+		ei	
+		ret	
+		
+IMTABLE		equ	36864
+		
+IM2		push	af
+		ex	af,af'
+		push	af
+		push	bc
+		push	de
+		push	hl
+		exx	
+		push	bc
+		push	de
+		push	hl
+		push	ix
+		push	iy
+		call	ACDDRV
+		pop	iy
+		pop	ix
+		pop	hl
+		pop	de
+		pop	bc
+		exx	
+		pop	hl
+		pop	de
+		pop	bc
+		pop	af
+		ex	af,af'
+		pop	af
+		ei	
+		ret	
+		
+MASTXT		db	"master,",' '+128
+SLATXT		db	"slave,",' '+128
+DRQTXT		db	"mic drq",','+128
+		db	"int drq",','+128
+		db	"acc drq",','+128
+		db	"unk drq",','+128
+		
+TABSTAT		dw	STNOR,STUNK,STOPE
+		dw	STNOA,STSTO,STPLA
+		dw	STPAU
+STNOR		db	"no CDROM driv",'e'+128
+STUNK		db	"unknown state",' '+128
+STOPE		db	"open door    ",' '+128
+STNOA		db	"no CD        ",' '+128
+STSTO		db	"stoped       ",' '+128
+STPLA		db	"playing      ",' '+128
+STPAU		db	"paused       ",' '+128
+		
+		
+;==============================
+;vypocetni rutiny
+;==============================
+		
+ADDHLA	
+		add	a,l
+		ld	l,a
+		ret	nc
+		inc	h
+		ret	
+		
+;==============================
+;tiskaci a prevodni rutiny
+;==============================
+		
+PRINTB	
+;HL adr
+;B pocet
+		ld	a,(hl)
+		rst	16
+		inc	hl
+		djnz	PRINTB
+		ret	
+		
+PRINT128	
+		ld	a,(hl)
+		bit	7,a
+		push	af
+		and	127
+		rst	16
+		inc	hl
+		pop	af
+		jr	z,PRINT128
+		ret	
+		
+PRINTSP	
+; call printsp
+; db   'text'
+; ...
+		pop	hl
+		call	PRINT128
+		jp	(hl)
+		
+PRINTA	
+		push	hl
+		ld	l,(hl)
+		ld	h,0
+		call	PRINTL2
+		pop	hl
+		inc	hl
+		ret	
+		
+PRINTERR	
+		ld	l,a
+		ld	h,0
+		ld	a,'#'
+		rst	16
+		call	PRNTLHEX
+		ld	a,32
+		rst	16
+		ret	
+		
+PRNTLHEX	ld	de,$10
+		ld	c,'0'
+		jr	PCISSP
+		
+;vytiskne cislo v L nebo HL
+PRINTL2		ld	c,'0'
+		jr	PRNTL
+PRINTL		ld	c,' '
+		jr	PRNTL
+PRINTHL		ld	c,' '
+		ld	de,10000
+		call	DIGIT
+		ld	de,1000
+		call	DIGIT
+PRNTL2		ld	de,100
+		call	DIGIT
+PRNTL		ld	de,10
+PCISSP		call	DIGIT
+		ld	e,1
+		ld	c,'0'
+DIGIT		ld	a,'0'-1
+DIG2		inc	a
+		or	a
+		sbc	hl,de
+		jr	nc,DIG2
+		add	hl,de
+		cp	'9'+1
+		jr	c,DIGIT22
+		add	a,'A'-'9'-1
+DIGIT22		cp	'0'
+		jr	nz,DIGIT2
+		ld	a,c
+		rst	16
+		ret	
+DIGIT2		ld	c,'0'
+		rst	16
+		ret	
+		
+LENPLAY		equ	$-START
+		
+		
+		
+;==============================
+;driver pro audio cd
+;==============================
+		
+;==============================
+;rozdrani pro styk s aplikaci
+;==============================
+		
+CDPDATA	
+		
+;jmeno ovladace
+;32 znaku doplneny mezerami
+DRVNAME		db	"DTP's AudioCD d"
+		db	"river v0.2a    "
+		db	"  "
+;jmeno cdrom doplnene mezer.
+DEVNAME		ds	40
+;info o cdrom
+DEVINFO		ds	1
+;0. 1=cdrom umi zamknout dvirka
+;1. 1=cdrom umi audioplay
+;2. 1=do zamc. lze vlozit med.
+;3. 1=je schopna prog. otevrit
+;4. master/slave
+;5. 1=mechanika umi cd-text
+;6.,7. typ drq (ATAPI)
+		
+;prvni track cd (nemusi byt 1!)
+CDFIRSTR	ds	1
+;posledni track cd
+CDLASTR		ds	1
+;delka cd
+CDSIZE		ds	3
+;1. min, 2. sec, 3. frame
+;obsah cd
+CDTOC		ds	99*8
+;max 99 stop
+;1. a 5. cislo stopy
+;+128 pokud neni audio
+;2.-4. MSF startu stopy
+;6.-8. MSF delky stopy
+		
+;stav cdrom
+CDRSTAT		ds	1
+;0-nedetekovana, 1-neznamy stat
+;2-otevrena dvirka
+;3-neni vlozeno cd
+;4-stop, 5-play, 6-pause
+;+128=zamcena cdrom
+;+64=medium bylo vymeneno
+;+32=vlozeno audio cd
+;+16=k cd je textovy popis
+;(cdtext nebo cddb)
+;aktualni stav cd a cdrom
+;musi byt za sebou (ldir)
+ACTTRACK	ds	1
+ACTINDEX	ds	1
+CDTIME		ds	4
+TRTIME		ds	4
+;az sem
+;chyba a jeji parametry
+CDERROR		ds	1
+SENSEKEY	ds	1
+ADSECOD		ds	1
+ADSECODQ	ds	1
+		
+;prikaz pro ovladac
+COMMAND		db	0
+;0-nic, 1-reset, 2-open/close
+;3-lock/unlock, 4-stop
+;5-pause/resume
+;6-play track(s), 7-play MSF
+;8-scan+ track(s), 9-scan+ MSF
+;+128 scan reversed
+;10-seek to track, 11-seek MSF
+;parametry prikazu
+COMTR1		db	0
+COMTR2		db	0
+COMMSF1		db	0,0,0
+COMMSF2		db	0,0,0
+		
+LENCDPAR	equ	COMMAND-CDFIRSTR
+		
+		
+;vstupni bod driveru
+ACDDRV		jp	DRVINIT
+		
+DRVINIT		call	DETECT
+		ret	c
+;pokracuj testem pritomnosti cd
+		ld	hl,ISOPEN
+		ld	(ACDDRV+1),hl
+		ret	
+		
+;periodicke testovani cdrom
+DRIVER	
+		ld	hl,RDSUB
+		call	ATAPICOM
+		jr	c,DRV5
+		ld	hl,BUFFERCD
+		call	READCD
+		jr	nc,DRV2
+;chyba, zacni od zacatku testem
+;pripravenosti cdrom
+DRV5		
+		ld	hl,ISOPEN
+		ld	(ACDDRV+1),hl
+		
+		ld	hl,WRSTAT+1
+		ld	a,(hl)
+		and	%10001111
+		ld	(hl),a
+		dec	hl
+		ld	a,1
+		jp	(hl)
+		
+;vse ok, precti si akt. stav
+DRV2		
+		ld	a,(BUFFERCD+1)
+		ld	b,5
+		cp	$11
+		jr	z,DRV3
+		ld	b,6
+		cp	$12
+		jr	z,DRV3
+		ld	b,4
+DRV3		
+		ld	a,b
+		call	WRSTAT
+DRV4		
+		ld	hl,BUFFERCD+6
+		ld	de,ACTTRACK
+		ld	bc,10
+		ldir	
+		
+;zpracovani prikazu
+COMMANDS	ld	hl,COMMAND
+		ld	a,(hl)
+		ld	(hl),0
+		ld	(CMDTMP+1),a
+		and	127
+		ret	z
+;smaz priznak "medium vymeneno"
+		ld	hl,WRSTAT+1
+		res	6,(hl)
+		dec	a
+		jr	nz,DRCLO
+;prikaz: reset atapi
+		ld	a,CRESETA
+		out	(RCOM),a
+		ld	b,0
+RESWT		ex	(sp),hl
+		ex	(sp),hl
+		djnz	RESWT
+;ident atapi (aby vracelo 80)
+		ld	a,CIDENTA
+		out	(RCOM),a
+		ld	hl,BUFFERCD
+		call	READCD
+		ret	nc
+		jp	ERROR
+		
+DRCLO		dec	a
+		jr	nz,DRLOC
+;prikaz: open/close
+		ld	a,(CDRSTAT)
+		and	31
+		cp	2
+		ld	a,3
+		jr	z,DRCLO2
+		dec	a
+DRCLO2	
+		ld	(OPCL2),a
+		ld	hl,OPCL
+COMSPOL		call	ATAPICOM
+		ret	nc
+		jp	ERROR
+		
+DRLOC		dec	a
+		jr	nz,DRSTO
+;prikaz: lock/unlock
+		ld	hl,WRSTAT+1
+		bit	7,(hl)
+		ld	a,1
+		jr	z,DRLOC2
+		xor	a
+DRLOC2		ld	(LOCKDRV+4),a
+		ld	a,(hl)
+		xor	128
+		ld	(hl),a
+		ld	hl,LOCKDRV
+		jr	COMSPOL
+		
+DRSTO		dec	a
+		jr	nz,DRPAU
+;prikaz: stop
+		ld	hl,STOP
+		jr	COMSPOL
+		
+DRPAU		dec	a
+		jr	nz,DRPLT
+;prikaz: pause/resume
+		ld	a,(CDRSTAT)
+		and	31
+		cp	6
+		ld	a,1
+		jr	z,DRPAU2
+		dec	a
+DRPAU2	
+		ld	(PARE2),a
+		ld	hl,PARE
+		jr	COMSPOL
+		
+DRPLT		dec	a
+		jr	nz,DRPLM
+;prikaz: play track(s)
+		ld	a,(COMTR1)
+		ld	hl,CDFIRSTR
+		sub	(hl)
+		ret	c
+		ld	de,PLAYMSF+3
+		push	hl
+		call	PLTRSP
+		pop	hl
+		ld	a,(COMTR2)
+		sub	(hl)
+		ret	c
+		inc	a
+		call	PLTRSP
+PLAYSPOL	ld	hl,PLAYMSF
+		jp	COMSPOL
+		
+;prenese msf tracku
+PLTRSP	
+		ld	bc,CDTOC
+		ld	l,a
+		ld	h,0
+		add	hl,hl
+		add	hl,hl
+		add	hl,hl
+		add	hl,bc
+		inc	hl
+		ldi	
+		ldi	
+		ldi	
+		ret	
+		
+DRPLM	
+		dec	a
+		jr	nz,DRSCT
+;prikaz: play msf
+		ld	hl,COMMSF1
+		ld	de,PLAYMSF+3
+		ld	bc,6
+		ldir	
+		jr	PLAYSPOL
+		
+DRSCT		dec	a
+		jr	nz,DRSCM
+;prikaz: scan track(s)
+		ld	a,(COMTR1)
+		ld	hl,CDFIRSTR
+		sub	(hl)
+		ret	c
+		ld	b,a
+CMDTMP		ld	a,0
+		bit	7,a
+		ld	a,0
+		jr	z,SCTRFOR
+		ld	a,16
+		inc	b
+SCTRFOR	
+		ld	de,SCANMSF+1
+		ld	(de),a
+		inc	de
+		inc	de
+		ld	a,b
+		call	PLTRSP
+SCANSPOL	ld	hl,SCANMSF
+		jp	COMSPOL
+		
+DRSCM		dec	a
+		jr	nz,DSEKTR
+;prikaz: scan msf
+		ld	hl,COMMSF1
+		ld	de,SCANMSF+3
+		ld	bc,3
+		ldir	
+		jr	SCANSPOL
+		
+DSEKTR		dec	a
+		jr	nz,DSEKM
+;prikaz: seek to track
+;neumime
+		
+DSEKM		dec	a
+		ret	nz
+;prikaz: seek to msf
+;neumime
+		
+		ret	
+		
+		
+;inicializace cdrom
+ISOPEN		call	COMMANDS
+;inicializuj promenne
+		ld	hl,CDFIRSTR
+		ld	de,CDFIRSTR+1
+		ld	bc,LENCDPAR-1
+		ld	(hl),0
+		ldir	
+		ld	hl,MODESENS
+		call	ATAPICOM
+		jr	nc,ISOPEN2
+		ld	a,c
+		and	%11110000
+		cp	96
+		jr	z,ISOPEN
+		jp	ERROR
+		
+ISOPEN2		ld	hl,BUFFERCD
+		call	READCD
+		jp	c,ERROR
+		ld	a,(BUFFERCD+2)
+		cp	$71
+		jr	nz,ISOP2
+		ld	hl,WRSTAT+1
+		ld	a,(hl)
+		and	%10001111
+		ld	(hl),a
+		dec	hl
+		ld	a,2
+		jp	(hl)
+		
+ISOP2		ld	hl,ISREADY
+		ld	(ACDDRV+1),hl
+		ld	hl,WRSTAT+1
+		ld	a,(hl)
+		and	%10001111
+		ld	(hl),a
+		dec	hl
+		ld	a,3
+		jp	(hl)
+		
+;test pripravenosti cdrom
+ISREADY		ld	hl,ISOPEN
+;pro pripad, ze neni
+		ld	(ACDDRV+1),hl
+		ld	hl,TUREADY
+		call	ATAPICOM
+		ret	c
+;je, pokracuj nactenim disku
+		ld	hl,READTOC
+		ld	(ACDDRV+1),hl
+		ret	
+		
+;nacteni obsahu cd
+READTOC	
+;kdyz chyba, test ready proces
+;znovu
+		ld	hl,ISOPEN
+		ld	(ACDDRV+1),hl
+		
+		ld	hl,RDTOC
+		call	ATAPICOM
+		jp	c,ERROR
+		ld	hl,BUFFERCD
+		call	READCD
+		jp	c,ERROR
+		
+;je to ok, muzeme prejit na
+;periodicke testovani
+		ld	hl,DRIVER
+		ld	(ACDDRV+1),hl
+		
+		ld	hl,WRSTAT+1
+;no cd-text
+		res	4,(hl)
+;no audio
+		res	5,(hl)
+;changed
+		set	6,(hl)
+		
+		ld	hl,BUFFERCD+2
+		ld	de,CDFIRSTR
+		ldi	
+		ldi	
+		
+		push	hl
+		pop	ix
+		ld	iy,CDTOC
+TOCSM1	
+		ld	a,(ix+7)
+		ld	(iy+3),a
+		ld	a,(ix+7+8)
+		sub	(ix+7)
+		ld	e,a
+		ld	a,(ix+6+8)
+		ld	b,(ix+6)
+		ld	(iy+2),b
+		jr	nc,BOR1
+		inc	b
+		ex	af,af'
+		ld	a,75
+		add	a,e
+		ld	e,a
+		ex	af,af'
+BOR1		sub	b
+		ld	d,a
+		ld	a,(ix+5+8)
+		ld	b,(ix+5)
+		ld	(iy+1),b
+		jr	nc,BOR2
+		inc	b
+		ex	af,af'
+		ld	a,60
+		add	a,d
+		ld	d,a
+		ex	af,af'
+BOR2		sub	b
+		ld	(iy+5),a
+		ld	(iy+6),d
+		ld	(iy+7),e
+		
+		ld	e,(ix+2)
+		set	7,e
+		ld	a,(ix+1)
+		and	%00001111
+		cp	4
+		jr	nc,TOCSM2
+		res	7,e
+;alespon jedna audio stopa
+		ld	hl,WRSTAT+1
+		set	5,(hl)
+TOCSM2	
+		ld	(iy+0),e
+		ld	(iy+4),e
+		
+		ld	bc,8
+		add	ix,bc
+		add	iy,bc
+		
+		ld	a,e
+		set	7,a
+		cp	$AA
+		jp	nz,TOCSM1
+		
+		ld	(iy-8),a
+		ld	(iy-4),a
+		xor	a
+		ld	(iy-3),a
+		ld	(iy-2),a
+		ld	(iy-1),a
+		
+		ld	l,(iy-7)
+		ld	h,(iy-6)
+		ld	(CDSIZE),hl
+		ld	a,(iy-5)
+		ld	(CDSIZE+2),a
+		
+;fixme!
+;nekam sem pridat podporu
+;cdtexu a cddb
+		
+		ld	a,4
+;jp wrstat
+		
+		
+WRSTAT		ld	b,0
+		or	b
+		ld	(CDRSTAT),a
+		ret	
+		
+		
+;osetreni chyb
+ERROR		ld	a,c
+		ld	(CDERROR),a
+;pokud timeout, dal nezjistuj
+		inc	a
+		ret	z
+;zjisti parametry chyby
+		ld	hl,REQSENS
+		call	ATAPICOM
+		ld	hl,BUFFERCD
+		call	READCD
+		ld	a,(BUFFERCD+2)
+		and	15
+		ld	(SENSEKEY),a
+		ld	a,(BUFFERCD+12)
+		ld	(ADSECOD),a
+		ld	a,(BUFFERCD+13)
+		ld	(ADSECODQ),a
+		ret	
+		
+;zjisteni pripojenych zarizeni
+;(pouzita prvni nalezena cdrom)
+DETECT		ld	a,62
+		ld	(FASTDRQ),a
+		xor	a
+		ld	(CDRSTAT),a
+		ld	(WRSTAT+1),a
+		call	DETECTIT
+		ret	nc
+		ld	a,62
+		ld	(FASTDRQ),a
+		ld	a,16
+		call	DETECTIT
+		ret	
+		
+DETECTIT	ld	(IDE_MOS),a
+		or	HKONST
+		out	(RHEAD),a
+;aktivuj master/slave
+		ld	a,CIDENTA
+		out	(RCOM),a
+		ld	hl,BUFFERCD
+		ld	bc,RDATA
+		call	IDE_DTRD
+		ret	c
+		inir	
+		inir	
+		call	IDE_DRRD
+		ret	c
+;zjisti, je-li to cdrom
+		ld	a,(BUFFERCD+1)
+		and	%00011111
+		cp	5
+		scf	
+		ret	nz
+;zjisti typ drq
+		ld	a,(BUFFERCD)
+		rla	
+		and	%11000000
+		ld	(DEVINFO),a
+;a podle toho modifikuju
+;casove smycky
+		ld	b,62
+		jr	z,DOIT2
+		ld	b,201
+DOIT2		ld	a,b
+		ld	(FASTDRQ),a
+;prohod dvojice pismen v textu
+		ld	hl,BUFFERCD+54
+		ld	b,40
+		call	PROHOD
+;prenes jmeno zarizeni
+		ld	hl,BUFFERCD+54
+		ld	de,DEVNAME
+		ld	bc,40
+		ldir	
+;zjisti schopnosti mechaniky
+DOIT4		ld	hl,MODESENS
+		call	ATAPICOM
+		jr	nc,DOIT3
+		ld	a,c
+		and	%11110000
+		cp	96
+		scf	
+		ret	nz
+;set changed
+		ld	hl,WRSTAT+1
+		set	6,(hl)
+		jr	DOIT4
+		
+DOIT3		ld	hl,BUFFERCD
+		call	READCD
+		ld	hl,BUFFERCD+8+4
+		ld	a,(hl)
+;audioplay
+		rla	
+		and	2
+		ld	b,a
+		inc	hl
+		inc	hl
+;lock status
+		bit	1,(hl)
+		jr	z,DOIT5
+		ld	a,(WRSTAT+1)
+		set	7,a
+		ld	(WRSTAT+1),a
+DOIT5	
+		ld	a,(hl)
+;0., 2. a 3.
+		and	%00001101
+;1.
+		or	b
+		ld	b,a
+		inc	hl
+		ld	a,(hl)
+		and	%00100000
+;5.
+		or	b
+		ld	b,a
+		ld	a,(IDE_MOS)
+		and	16
+;master/slave (4.)
+		or	b
+		ld	hl,DEVINFO
+;5. a 6.
+		or	(hl)
+		ld	(hl),a
+		or	a
+;nc
+		ret	
+		
+		
+;prehodi poradi bajtu v identi-
+;fikaci zarizeni
+;HL adresa
+;B kolik bytu
+;MENI: A
+PROHOD	
+		push	hl
+		push	bc
+		rrc	b
+PROHOD1	
+		ld	a,(hl)
+		inc	hl
+		ld	c,(hl)
+		dec	hl
+		ld	(hl),c
+		inc	hl
+		ld	(hl),a
+		inc	hl
+		djnz	PROHOD1
+		pop	bc
+		pop	hl
+		ret	
+		
+		
+;==============================
+;nejnizsi rutiny pro ATA/ATAPI
+;==============================
+		
+ATAPICOM	
+;v hl adresa 12 bajtu prikazu
+		ld	a,CATAPI
+		ld	b,0
+		ex	af,af'
+;fixni max. delka prenosu
+		ld	de,2048
+		call	IDEOUT2
+		ret	c
+		ld	bc,256*12+RDATA
+		call	IDE_DTRD
+		ret	c
+		otir	
+;test konce operace
+		call	IDE_DRRD
+		ret	c
+		in	a,(RSTAT)
+		rra	
+		jp	c,IDEDTRD1
+		ret	
+		
+READCD	
+;nacte vsechny predane bajty
+		call	IDE_DTRD
+		ret	c
+		in	a,(RCYLH)
+		or	a
+		jr	z,READCD2
+		ld	bc,RDATA
+READCD1	
+		ex	af,af'
+		call	IDE_DTRD
+		ret	c
+		inir	
+		ex	af,af'
+		dec	a
+		jr	nz,READCD1
+READCD2	
+;tady mozna problem, pokud cdro
+;zmeni delku behem prenosu
+		in	a,(RCYLL)
+		or	a
+		jp	z,IDE_DRRD
+		ld	b,a
+		ld	c,RDATA
+		call	IDE_DTRD
+		ret	c
+		inir	
+;test konce operace
+		jp	IDE_DRRD
+		
+		
+IDEOUT	
+;DE cyl
+;B hlava
+;C sektor
+;A pocet sektoru
+;A' prikaz
+;MENI: vola drvrdy (DE), AA'F..
+		
+		out	(RSECPOC),a
+		ld	a,c
+		out	(RSEC),a
+		
+IDEOUT2	
+;pro atapi
+		ld	a,d
+		out	(RCYLH),a
+		ld	a,e
+		out	(RCYLL),a
+		
+		ld	a,(IDE_MOS)
+		or	b
+		or	HKONST
+		out	(RHEAD),a
+		
+		call	IDE_DRRD
+		ret	c
+		
+		ex	af,af'
+		out	(RCOM),a
+		
+		or	a
+		ret	
+		
+IDE_DRRD 
+;ceka na pripravenost drivu
+; not busy & drive ready
+		ld	de,0
+IDEDRRD1	
+		in	a,(RSTAT)
+		and	192
+		cp	64
+		ret	z
+		dec	de
+		ex	(sp),hl
+		ex	(sp),hl
+;trocha casu...
+		ld	a,d
+		or	e
+		jr	nz,IDEDRRD1
+;timeout
+		ld	bc,255+512
+		scf	
+		ret	
+		
+IDE_DTRD 
+;ready to transfer
+;s timeoutem a testem busy
+;>
+; c = error
+; nc TrReady
+		ld	de,0
+IDEDTRD2	
+		in	a,(RSTAT)
+		bit	7,a
+		jr	nz,DTROUT
+		rrca	
+		jr	c,IDEDTRD1
+		bit	2,a
+;4. bit, je to posunuto
+		jr	z,DTROUT
+;pauza 3 ms
+FASTDRQ		ld	a,148
+ATAWAIT		ex	(sp),hl
+		ex	(sp),hl
+		ex	(sp),hl
+		ex	(sp),hl
+		dec	a
+		jr	nz,ATAWAIT
+		ret	
+		
+DTROUT	
+		dec	de
+		ex	(sp),hl
+		ex	(sp),hl
+;pro wakeup stanby disku
+		ld	a,d
+		or	e
+		jr	nz,IDEDTRD2
+;timeout
+		ld	bc,255+512
+		scf	
+		ret	
+		
+IDEDTRD1	
+		in	a,(RPARAM)
+		ld	c,a
+		ld	b,1
+		ret	
+		
+		
+;==============================
+;data pro ATA/ATAPI
+;==============================
+		
+IDE_MOS		ds	1
+		
+		
+;==============================
+;atapi prikazy
+;==============================
+STOP		db	$1B,0,0,0,0,0
+		db	0,0,0,0,0,0
+OPCL		db	$1B,0,0,0
+OPCL2		db	2,0,0,0,0,0,0,0
+PLAYMSF		db	$47,0,0
+		db	0,2,0,1,2,0
+		db	0,0,0
+SCANMSF		db	$BA,0
+		dw	0,0,0
+		db	0,64,0,0
+PARE		db	$4B,0,0,0,0,0,0,0
+PARE2		db	0,0,0,0
+RDTOC		db	$43,2,0,0,0,0,0
+		dw	4,0,0
+RDSUB		db	$42,2,64,1,0,0,0
+		dw	4,0,0
+MODESENS	db	$5A,0,$2A,0,0,0,0
+		dw	4,0,0
+TUREADY		dw	0,0,0,0,0,0
+LOCKDRV		dw	$1E,0,0,0,0,0
+REQSENS		db	3,0,0,0,255,0
+		dw	0,0,0
+RDCDTXT		db	$43,0,5,0,0,0,0
+		dw	4,0,0
+		
+		
+;==============================
+; Definice IDE konstant
+;==============================
+		
+		
+DRON		equ	0
+;DRON	equ	32
+		
+RDATA		equ	163+DRON
+RPARAM		equ	167+DRON
+RSECPOC		equ	171+DRON
+RSEC		equ	175+DRON
+RCYLL		equ	179+DRON
+RCYLH		equ	183+DRON
+RHEAD		equ	187+DRON
+RCOM		equ	191+DRON
+RSTAT		equ	191+DRON
+		
+CRESET		equ	$10
+CRESETA		equ	$08
+CREAD		equ	$20
+CWRITE		equ	$30
+CDIAG		equ	$90
+CIDENT		equ	$EC
+CIDENTA		equ	$A1
+CATAPI		equ	$A0
+		
+HKONST		equ	160
+		
+BUFFERCD	equ	37376
+		
+LENDRV		equ	$-CDPDATA
+LENALL		equ	$-START
+
+; for SjASMPlus
+;		savebin "zxcdp.bin",START,LENALL
+		
+
+; nastaveni pro VI (tabulatory 5 znaku a filetype)
+; vim:set ts=8 ft=z8asl:
